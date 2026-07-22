@@ -1,34 +1,62 @@
 name: Copy Docker Image
-run-name: Copy ${{ inputs.source_repo }} to ${{ inputs.destination_repo }}
+run-name: Copy ${{ inputs.source_image }} to ${{ inputs.destination_image }}
 on: 
   workflow_dispatch:
     inputs:
-      source:
-        description: '镜像源 (Registry)'     
+      source_image:
+        description: '原始 Image (格式 registry/repo:tag)'
         required: true
-        default: 'docker.io'
-      destination:
-        description: '目标源 (Registry)'
+        default: 'ghcr.io/mic1on/onestep-control-plane:latest'
+      destination_image:
+        description: '目标 Image (格式 registry/repo:tag)'
         required: true
-        default: 'registry.cn-shanghai.aliyuncs.com'
-      source_repo:
-        description: '仓库及标签 (格式 repo:tag)'
-        required: true
-        default: ''
-      destination_repo:
-        description: '目标仓库及标签 (格式 repo:tag)'
-        required: true
-        default: ''
+        default: 'registry.cn-shanghai.aliyuncs.com/ceeg/onestep-control-plane:latest'
 
 jobs:
   copy:
     runs-on: ubuntu-latest
     steps:
+    - name: Parse Docker Images
+      id: images
+      shell: bash
+      env:
+        SOURCE_IMAGE: ${{ github.event.inputs.source_image }}
+        DESTINATION_IMAGE: ${{ github.event.inputs.destination_image }}
+      run: |
+        set -euo pipefail
+
+        parse_image() {
+          local name="$1"
+          local image="$2"
+
+          if [[ -z "$image" || "$image" != */* ]]; then
+            echo "::error::${name} must use registry/repo:tag format"
+            exit 1
+          fi
+
+          local registry="${image%%/*}"
+          local repo="${image#*/}"
+          local repo_name="${repo##*/}"
+
+          if [[ -z "$registry" || -z "$repo" || "$repo_name" != *:* ]]; then
+            echo "::error::${name} must use registry/repo:tag format"
+            exit 1
+          fi
+
+          {
+            echo "${name}_registry=${registry}"
+            echo "${name}_repo=${repo}"
+          } >> "$GITHUB_OUTPUT"
+        }
+
+        parse_image "source" "$SOURCE_IMAGE"
+        parse_image "destination" "$DESTINATION_IMAGE"
+
     - name: Copy Docker Images
       uses: ikrong/docker-sync-action@main
       with:
-        source: ${{ github.event.inputs.source }}
+        source: ${{ steps.images.outputs.source_registry }}
         source-credential: ${{ secrets.SOURCE_CREDENTIAL }}
-        destination: ${{ github.event.inputs.destination }}
+        destination: ${{ steps.images.outputs.destination_registry }}
         destination-credential: ${{ secrets.DESTINATION_CREDENTIAL }}
-        copy: "${{ github.event.inputs.source_repo }} ${{ github.event.inputs.destination_repo }}"
+        copy: "${{ steps.images.outputs.source_repo }} ${{ steps.images.outputs.destination_repo }}"

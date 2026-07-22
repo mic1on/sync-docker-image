@@ -15,6 +15,8 @@ CONFIRM=
 INPUT_CONFIGS=(docker.io registry.cn-beijing.aliyuncs.com)
 
 INPUT_SHORT=()
+COPY_SOURCE_IMAGE=
+COPY_DESTINATION_IMAGE=
 
 RUN_ID=
 RUN_NUMBER=
@@ -66,6 +68,12 @@ function get_repo() {
 
 function read_copy_config() {
     case $1 in
+        source_image)
+            COPY_SOURCE_IMAGE=$2
+            ;;
+        destination_image)
+            COPY_DESTINATION_IMAGE=$2
+            ;;
         source)
             INPUT_CONFIGS[0]=$2
             ;;
@@ -79,6 +87,15 @@ function read_copy_config() {
             INPUT_CONFIGS[3]=$2
             ;;
     esac
+}
+
+function normalize_copy_inputs() {
+    if [ "$COPY_SOURCE_IMAGE" = "" ] && [ "${INPUT_CONFIGS[0]}" != "" ] && [ "${INPUT_CONFIGS[2]}" != "" ]; then
+        COPY_SOURCE_IMAGE="${INPUT_CONFIGS[0]}/${INPUT_CONFIGS[2]}"
+    fi
+    if [ "$COPY_DESTINATION_IMAGE" = "" ] && [ "${INPUT_CONFIGS[1]}" != "" ] && [ "${INPUT_CONFIGS[3]}" != "" ]; then
+        COPY_DESTINATION_IMAGE="${INPUT_CONFIGS[1]}/${INPUT_CONFIGS[3]}"
+    fi
 }
 
 function read_sync_config() {
@@ -103,6 +120,18 @@ function check_inputs() {
         r "Error: inputs is not correct"
         usage
         exit 1
+    fi
+    if [ "$WORKFLOW" = "copy.yml" ]; then
+        normalize_copy_inputs
+        if [ "$COPY_SOURCE_IMAGE" = "" ]; then
+            r "ERROR: source_image is required"
+            exit 1
+        fi
+        if [ "$COPY_DESTINATION_IMAGE" = "" ]; then
+            r "ERROR: destination_image is required"
+            exit 1
+        fi
+        return
     fi
     if [ "${INPUT_CONFIGS[0]}" = "" ]; then
         r "ERROR: source is required"
@@ -130,7 +159,8 @@ function format_config() {
     timestamp=$(date "+%Y-%m-%d %H:%M:%S")
     case $WORKFLOW in
         copy.yml)
-            echo "[$timestamp] COPY ${INPUT_CONFIGS[0]}/${INPUT_CONFIGS[2]} ${INPUT_CONFIGS[1]}/${INPUT_CONFIGS[3]} <$1>"
+            normalize_copy_inputs
+            echo "[$timestamp] COPY ${COPY_SOURCE_IMAGE} ${COPY_DESTINATION_IMAGE} <$1>"
             ;;
         sync.yml)
             echo "[$timestamp] SYNC ${INPUT_CONFIGS[0]}/${INPUT_CONFIGS[2]} ${INPUT_CONFIGS[1]}/${INPUT_CONFIGS[3]} <$1>"
@@ -221,22 +251,7 @@ function trigger() {
     if [ "$INPUTS" = "" ]; then
         if [ ${#INPUT_SHORT[@]} = 2 ]; then
             if [ "$WORKFLOW" = "copy.yml" ]; then
-                local source_seg_str=$(check_repo ${INPUT_SHORT[0]})
-                local dest_seg_str=$(check_repo ${INPUT_SHORT[1]})
-                IFS="|"
-                local source_seg=($source_seg_str)
-                if [ "${source_seg[0]}" != "" ];then
-                    INPUTS="$INPUTS source=${source_seg[0]} source_repo=$(get_image_repo ${INPUT_SHORT[0]})"
-                else
-                    INPUTS="$INPUTS source_repo=$(get_image_repo ${INPUT_SHORT[0]})"
-                fi
-                IFS="|"
-                local dest_seg=($dest_seg_str)
-                if [ "${dest_seg[0]}" != "" ];then
-                    INPUTS="$INPUTS destination=${dest_seg[0]} destination_repo=$(get_image_repo ${INPUT_SHORT[1]})"
-                else
-                    INPUTS="$INPUTS destination_repo=$(get_image_repo ${INPUT_SHORT[1]})"
-                fi
+                INPUTS="$INPUTS source_image=${INPUT_SHORT[0]} destination_image=${INPUT_SHORT[1]}"
             else
                 local source_seg_str=$(check_repo ${INPUT_SHORT[0]})
                 local dest_seg_str=$(check_repo ${INPUT_SHORT[1]})
@@ -261,14 +276,14 @@ function trigger() {
         fi
         if [ ${#INPUT_SHORT[@]} = 3 ]; then
             if [ "$WORKFLOW" = "copy.yml" ]; then
-                INPUTS="destination=${INPUT_SHORT[0]} source_repo=${INPUT_SHORT[1]} destination_repo=${INPUT_SHORT[2]}"
+                INPUTS="source_image=${INPUT_CONFIGS[0]}/${INPUT_SHORT[1]} destination_image=${INPUT_SHORT[0]}/${INPUT_SHORT[2]}"
             else
                 INPUTS="destination=${INPUT_SHORT[0]} source_repo=${INPUT_SHORT[1]} destination_scope=${INPUT_SHORT[2]}"
             fi
         fi
         if [ ${#INPUT_SHORT[@]} = 4 ]; then
             if [ "$WORKFLOW" = "copy.yml" ]; then
-                INPUTS="source=${INPUT_SHORT[0]} destination=${INPUT_SHORT[1]} source_repo=${INPUT_SHORT[2]} destination_repo=${INPUT_SHORT[3]}"
+                INPUTS="source_image=${INPUT_SHORT[0]}/${INPUT_SHORT[2]} destination_image=${INPUT_SHORT[1]}/${INPUT_SHORT[3]}"
             else
                 INPUTS="source=${INPUT_SHORT[0]} destination=${INPUT_SHORT[1]} source_repo=${INPUT_SHORT[2]} destination_scope=${INPUT_SHORT[3]}"
             fi
@@ -302,10 +317,9 @@ function trigger() {
                         -f 'inputs[destination_scope]=${INPUT_CONFIGS[3]}'"
                 ;;
             copy.yml)
-                params="-f 'inputs[source]=${INPUT_CONFIGS[0]}' \
-                        -f 'inputs[destination]=${INPUT_CONFIGS[1]}' \
-                        -f 'inputs[source_repo]=${INPUT_CONFIGS[2]}' \
-                        -f 'inputs[destination_repo]=${INPUT_CONFIGS[3]}'"
+                normalize_copy_inputs
+                params="-f 'inputs[source_image]=${COPY_SOURCE_IMAGE}' \
+                        -f 'inputs[destination_image]=${COPY_DESTINATION_IMAGE}'"
                 ;;
         esac
     fi
@@ -487,9 +501,10 @@ function pull_image() {
     if [ $? -ne 0 ]; then
         echo "You need to install docker first"
     else
-        echo "Pulling image ${INPUT_CONFIGS[1]}/${INPUT_CONFIGS[3]}"
-        docker pull ${INPUT_CONFIGS[1]}/${INPUT_CONFIGS[3]}
-        docker tag ${INPUT_CONFIGS[1]}/${INPUT_CONFIGS[3]} ${INPUT_CONFIGS[0]}/${INPUT_CONFIGS[2]}
+        normalize_copy_inputs
+        echo "Pulling image ${COPY_DESTINATION_IMAGE}"
+        docker pull ${COPY_DESTINATION_IMAGE}
+        docker tag ${COPY_DESTINATION_IMAGE} ${COPY_SOURCE_IMAGE}
     fi
 }
 

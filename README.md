@@ -20,27 +20,23 @@ Docker 的一些服务所在域名被封杀，无法直接访问和拉取镜像�
 
 ![配置内容](assets/new-secret.png)
 
-3. 在 *Actions* 页面上选择 *copy.yml* 点击 *Run workflow* 填写内容即可运行。
+3. 在 *Actions* 页面上选择 *copy.yml* 点击 *Run workflow* 填写原始 Image 和目标 Image 即可运行。
 
 ![Run Copy workflow](assets/copy.png)
 
 > 填写说明：
 >
-> 如同步 DockerHub 上的 nginx:1.13 到 阿里云容器镜像仓库 registry.cn-beijing.aliyuncs.com/ikrong/nginx:1.13，则填写如下：
+> 如同步 ghcr.io/mic1on/onestep-control-plane:latest 到阿里云容器镜像仓库 registry.cn-shanghai.aliyuncs.com/ceeg/onestep-control-plane:latest，则填写如下：
 >
 > ```yaml
-> # 镜像源 (Registry)
-> source: docker.io
-> # 目标源 (Registry)
-> destination: registry.cn-beijing.aliyuncs.com
-> # 仓库及标签 (格式 repo:tag)
-> source_repo: nginx:1.13
-> # 目标仓库及标签 (格式 repo:tag)
+> # 原始 Image (格式 registry/repo:tag)
+> source_image: ghcr.io/mic1on/onestep-control-plane:latest
+> # 目标 Image (格式 registry/repo:tag)
 > # 另外：目标仓库必须要在阿里云容器镜像仓库中手动创建
-> #      此例子需要在个人scope下创建 nginx 仓库
-> destination_repo: ikrong/nginx:1.13
+> #      此例子需要在 ceeg scope 下创建 onestep-control-plane 仓库
+> destination_image: registry.cn-shanghai.aliyuncs.com/ceeg/onestep-control-plane:latest
 > ```
-> 必须要填写仓库及标签
+> 必须填写完整镜像地址和标签
 
 ## Sync.yml 运行介绍
 
@@ -95,17 +91,15 @@ gh auth login
 
 5. 命令行运行 copy.yml workflow
 
-以将 nginx:1.13 复制到 registry.cn-beijing.aliyuncs.com/ikrong/nginx:1.13 仓库为例
+以将 ghcr.io/mic1on/onestep-control-plane:latest 复制到 registry.cn-shanghai.aliyuncs.com/ceeg/onestep-control-plane:latest 仓库为例
 
 ```shell
 # 命令行如下：
-./exec.sh trigger -w copy.yml destination=registry.cn-beijing.aliyuncs.com source_repo=nginx:1.13 destination_repo=ikrong/nginx:1.13
-# 可以省略等号前面的，但是顺序不能变
-./exec.sh trigger -w copy.yml registry.cn-beijing.aliyuncs.com nginx:1.13 ikrong/nginx:1.13
-# 由于脚本默认 registry.cn-beijing.aliyuncs.com ，所以这个也可以省略
-./exec.sh trigger -w copy.yml nginx:1.13 ikrong/nginx:1.13
+./exec.sh trigger -w copy.yml source_image=ghcr.io/mic1on/onestep-control-plane:latest destination_image=registry.cn-shanghai.aliyuncs.com/ceeg/onestep-control-plane:latest
+# 可以省略等号前面的，但是顺序不能变：原始 Image 在前，目标 Image 在后
+./exec.sh trigger -w copy.yml ghcr.io/mic1on/onestep-control-plane:latest registry.cn-shanghai.aliyuncs.com/ceeg/onestep-control-plane:latest
 # 另外 trigger -w copy.yml 可以简写为 copy，所以命令可以改为
-./exec.sh copy nginx:1.13 ikrong/nginx:1.13
+./exec.sh copy ghcr.io/mic1on/onestep-control-plane:latest registry.cn-shanghai.aliyuncs.com/ceeg/onestep-control-plane:latest
 
 # 查看运行状态，不过上面的 trigger 命令执行时会自动输出 status，下面的命令一般不需要执行
 ./exec.sh status -w copy.yml
@@ -127,9 +121,9 @@ gh auth login
 7. 推荐使用命令
 
 ```shell
-# 如果想要复制1个标签，如 nginx:1.13 到 registry.cn-beijing.aliyuncs.com/ikrong/nginx:1.13
+# 如果想要复制1个标签，如 ghcr.io/mic1on/onestep-control-plane:latest 到 registry.cn-shanghai.aliyuncs.com/ceeg/onestep-control-plane:latest
 # 则可以使用命令
-./exec.sh copy nginx:1.13 ikrong/nginx:1.13
+./exec.sh copy ghcr.io/mic1on/onestep-control-plane:latest registry.cn-shanghai.aliyuncs.com/ceeg/onestep-control-plane:latest
 
 # 如果想要同步某个仓库，如 nginx 到 registry.cn-beijing.aliyuncs.com/ikrong/nginx 仓库
 # 则可以使用命令
@@ -146,28 +140,27 @@ gh auth login
 
 ```shell
 # 想要复制某个镜像标签，可以直接这样执行命令
-./exec.sh copy ghcr.io/nginx:1.13 registry.cn-hangzhou.aliyuncs.com/ikrong/nginx:1.13
-./exec.sh copy nginx:1.13 registry.cn-hangzhou.aliyuncs.com/ikrong/nginx:1.13
+./exec.sh copy ghcr.io/mic1on/onestep-control-plane:latest registry.cn-shanghai.aliyuncs.com/ceeg/onestep-control-plane:latest
 # 想要同步某个仓库，可以直接这样执行命令
 ./exec.sh sync ghcr.io/nginx registry.cn-hangzhou.aliyuncs.com/ikrong
 ./exec.sh sync ghcr.io/nginx:1.13 registry.cn-hangzhou.aliyuncs.com/ikrong/nginx:1.13 
 # 指定标签和上面不指定标签无任何区别，脚本会忽略掉后面的标签
 
 # 使用 ./copy.sh 和 ./sync.sh 命令
-./copy.sh ghcr.io/nginx:1.13 registry.cn-hangzhou.aliyuncs.com/ikrong/nginx:1.13
+./copy.sh ghcr.io/mic1on/onestep-control-plane:latest registry.cn-shanghai.aliyuncs.com/ceeg/onestep-control-plane:latest
 ./sync.sh nginx registry.cn-hangzhou.aliyuncs.com/ikrong
 ```
 
 9. 当使用copy时，可以指定参数 --pull 就可以在 workflow 执行完毕后，自动拉取镜像
 
 ```shell
-./copy.sh nginx:1.14 ikrong/nginx:1.14 --pull
+./copy.sh ghcr.io/mic1on/onestep-control-plane:latest registry.cn-shanghai.aliyuncs.com/ceeg/onestep-control-plane:latest --pull
 ```
 
 10. 脚本默认会有确认提示，使用参数 -y 可以跳过确认执行
 
 ```shell
-./copy.sh nginx:1.14 ikrong/nginx:1.14 -y
+./copy.sh ghcr.io/mic1on/onestep-control-plane:latest registry.cn-shanghai.aliyuncs.com/ceeg/onestep-control-plane:latest -y
 ./sync.sh nginx ikrong -y
 ```
 
